@@ -157,6 +157,8 @@ func TestNew(t *testing.T) {
 		want *Pow
 	}{
 		// TODO: Add test cases.
+		{"check proper defaults", args{&PowConfig{}}, &Pow{nonceLength: 10}},
+		{"check proper sets", args{&PowConfig{secret: "abc", check: true, difficulty: 10, nonceLength: 5}}, &Pow{secret: "abc", check: true, difficulty: 10, nonceLength: 5}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
