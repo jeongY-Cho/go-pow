@@ -72,8 +72,11 @@ func TestPow_VerifyHash(t *testing.T) {
 		want    bool
 		wantErr bool
 	}{
-		// TODO: Add test cases.
-		{"verify", New(&PowConfig{}), args{"", "", "", ""}, false, true},
+		{"check, empty", New(&PowConfig{check: true}), args{"", "", "", "a"}, false, true},
+		{"no check empty", New(&PowConfig{}), args{"", "", "", ""}, false, true},
+		{"check", New(&PowConfig{check: true, secret: "secret"}), args{"nonce", "data", "2c177eecd4ad52094136dff33d30163ff0e47a95934a5c3e95abbade8700cdfd", "5c420d7fedeb75e1309b1fe82f9c85d5552f1edfc11c72e7749330881166f18d"}, true, false},
+		{"check but no checksum", New(&PowConfig{check: true, secret: "secret"}), args{"nonce", "data", "2c177eecd4ad52094136dff33d30163ff0e47a95934a5c3e95abbade8700cdfd", ""}, false, true},
+		{"no check", New(&PowConfig{check: false}), args{"nonce", "data", "2c177eecd4ad52094136dff33d30163ff0e47a95934a5c3e95abbade8700cdfd", ""}, true, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -99,7 +102,9 @@ func TestPow_VerifyDifficulty(t *testing.T) {
 		args args
 		want bool
 	}{
-		// TODO: Add test cases.
+		{"test diff 0", New(&PowConfig{}), args{"adfsj;kladfsj;kladfs"}, true},
+		{"test diff 1", New(&PowConfig{difficulty: 1}), args{"adfsj;kladfsj;kladfs"}, false},
+		{"test diff 0", New(&PowConfig{difficulty: 1}), args{"0adfsj;kladfsj;kladfs"}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -124,7 +129,9 @@ func TestPow_VerifyHashAtDifficulty(t *testing.T) {
 		want    bool
 		wantErr bool
 	}{
-		// TODO: Add test cases.
+		{"good hash, bad diff", New(&PowConfig{check: true, secret: "secret", difficulty: 1}), args{"nonce", "data", "2c177eecd4ad52094136dff33d30163ff0e47a95934a5c3e95abbade8700cdfd", "5c420d7fedeb75e1309b1fe82f9c85d5552f1edfc11c72e7749330881166f18d"}, false, true},
+		{"good hash, good diff", New(&PowConfig{check: true, secret: "secret", difficulty: 1}), args{"nonce", "data11222222222222222221", "0b891de4a7ca9eaf65ea443e72980a2acd63d00caa9f2f431885ee16939bba99", "5c420d7fedeb75e1309b1fe82f9c85d5552f1edfc11c72e7749330881166f18d"}, true, false},
+		{"bad hash, good diff", New(&PowConfig{check: true, secret: "secret", difficulty: 1}), args{"nonce", "data11222222222222222221", "0b8912e4a7ca9eaf65ea443e72980a2acd63d00caa9f2f431885ee16939bba99", "5c420d7fedeb75e1309b1fe82f9c85d5552f1edfc11c72e7749330881166f18d"}, false, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

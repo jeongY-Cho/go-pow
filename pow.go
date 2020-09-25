@@ -25,7 +25,7 @@ func (p *Pow) GenerateNonce() ([2]string, error) {
 	var err error
 	returnArr[0], err = gonanoid.ID(p.nonceLength)
 	if err != nil {
-		return [2]string{}, err
+		return returnArr, err
 	}
 
 	if !p.check {
@@ -77,7 +77,7 @@ func (p *Pow) VerifyHashAtDifficulty(nonce string, data string, hash string, non
 type PowConfig struct {
 	secret      string
 	nonceLength int
-	verify      bool
+	check       bool
 	difficulty  int
 }
 
@@ -91,7 +91,7 @@ func New(config *PowConfig) *Pow {
 	return &Pow{
 		secret:      config.secret,
 		nonceLength: nonceLength,
-		check:       config.verify,
+		check:       config.check,
 		difficulty:  config.difficulty,
 	}
 }
