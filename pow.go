@@ -12,10 +12,10 @@ import (
 
 // Pow ...
 type Pow struct {
-	secret      string
-	nonceLength int
-	check       bool
-	difficulty  int
+	Secret      string
+	NonceLength int
+	Check       bool
+	Difficulty  int
 }
 
 // GenerateNonce generates a new nonce, also generates signature if verify enabled
@@ -23,28 +23,28 @@ func (p *Pow) GenerateNonce() ([2]string, error) {
 	returnArr := [2]string{}
 
 	var err error
-	returnArr[0], err = gonanoid.ID(p.nonceLength)
+	returnArr[0], err = gonanoid.ID(p.NonceLength)
 	if err != nil {
 		return returnArr, err
 	}
 
-	if !p.check {
+	if !p.Check {
 		return returnArr, nil
 	}
 
-	hash := sha256.Sum256([]byte(returnArr[0] + p.secret))
+	hash := sha256.Sum256([]byte(returnArr[0] + p.Secret))
 	returnArr[1] = hex.EncodeToString(hash[:])
 	return returnArr, nil
 }
 
 // VerifyHash verifies the hash given the nonce and data
 func (p *Pow) VerifyHash(nonce string, data string, hash string, nonceSig string) (bool, error) {
-	if p.check {
+	if p.Check {
 		if nonceSig == "" {
 			return false, errors.New("can't verify with empty nonceSig")
 		}
 
-		sign := sha256.Sum256([]byte(nonce + p.secret))
+		sign := sha256.Sum256([]byte(nonce + p.Secret))
 		if strSign := hex.EncodeToString(sign[:]); strSign != nonceSig {
 			return false, fmt.Errorf("nonce is invalid. Provided nonce hashed to: <%v> Expected: <%v>", strSign, nonceSig)
 		}
@@ -61,37 +61,29 @@ func (p *Pow) VerifyHash(nonce string, data string, hash string, nonceSig string
 
 // VerifyDifficulty verifies hash fulfils difficulty requirement
 func (p *Pow) VerifyDifficulty(hash string) bool {
-	return strings.HasPrefix(hash, strings.Repeat("0", p.difficulty))
+	return strings.HasPrefix(hash, strings.Repeat("0", p.Difficulty))
 }
 
 // VerifyHashAtDifficulty verifies hash and difficulty
 func (p *Pow) VerifyHashAtDifficulty(nonce string, data string, hash string, nonceSig string) (bool, error) {
 	if !p.VerifyDifficulty(hash) {
-		return false, fmt.Errorf("failed to verify at difficulty: %v", p.difficulty)
+		return false, fmt.Errorf("failed to verify at difficulty: %v", p.Difficulty)
 	}
 
 	return p.VerifyHash(nonce, data, hash, nonceSig)
 }
 
-// PowConfig config struct for a new proof-of-work object
-type PowConfig struct {
-	secret      string
-	nonceLength int
-	check       bool
-	difficulty  int
-}
-
 // New helper function to return new pow object with defaults
-func New(config *PowConfig) *Pow {
-	nonceLength := config.nonceLength
+func New(config *Pow) *Pow {
+	nonceLength := config.NonceLength
 	if nonceLength == 0 {
 		nonceLength = 10
 	}
 
 	return &Pow{
-		secret:      config.secret,
-		nonceLength: nonceLength,
-		check:       config.check,
-		difficulty:  config.difficulty,
+		Secret:      config.Secret,
+		NonceLength: nonceLength,
+		Check:       config.Check,
+		Difficulty:  config.Difficulty,
 	}
 }

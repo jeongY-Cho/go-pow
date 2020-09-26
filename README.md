@@ -18,13 +18,12 @@ import github.com/jeongY-Cho/go-pow
 func main() {
 
   // make an instance with default config
-  pow := gopow.New(&PowConfig{})
-  // type PowConfig struct {
-  // 	secret      string default: ""
-  // 	nonceLength int    default: 10
-  // 	check       bool   default: false
-  // 	difficulty  int    default: 0
-  // }
+  pow := gopow.New(&Pow{})
+  // defaults:
+  // 	Secret      ""
+  // 	NonceLength 10
+  // 	Check       false
+  // 	Difficulty  0
 
   // generate a nonce
   nonceArr, err := pow.GenerateNonce()
@@ -55,18 +54,12 @@ import github.com/jeongY-Cho/go-pow
 func main() {
 
   // make an instance with a config
-  pow := gopow.New(&PowConfig{
-    secret: "thisisasecret",
-    nonceLength: 100,
-    check: true,
-    difficulty: 2
+  pow := gopow.New(&Pow{
+    Secret: "thisisasecret",
+    NonceLength: 100,
+    Check: true,
+    Difficulty: 2
   })
-  // type PowConfig struct {
-  // 	secret      string default: ""
-  // 	nonceLength int    default: 10
-  // 	check       bool   default: false
-  // 	difficulty  int    default: 0
-  // }
 
   // generate a nonce
   nonceArr, err := pow.GenerateNonce()
