@@ -13,7 +13,7 @@ go get github.com/jeongY-Cho/go-pow
 ### Not Interesting Use
 
 ```go
-import github.com/jeongY-Cho/go-pow
+import "github.com/jeongY-Cho/go-pow"
 
 func main() {
 
