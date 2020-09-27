@@ -1,15 +1,19 @@
 package gopow
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"reflect"
 	"testing"
+
+	gonanoid "github.com/matoous/go-nanoid"
 )
 
 func TestPow_GenerateNonce(t *testing.T) {
 	t.Run("generate nonce with check", func(t *testing.T) {
 		nonceLength := 10
-		p := &Pow{Check: true, NonceLength: nonceLength, Secret: "abc"}
+		p := New(&Pow{Check: true, NonceLength: nonceLength, Secret: "abc"})
 
 		nonce, err := p.GenerateNonce()
 		if err != nil {
@@ -27,7 +31,7 @@ func TestPow_GenerateNonce(t *testing.T) {
 
 	t.Run("generate nonce without check", func(t *testing.T) {
 		nonceLength := 10
-		p := &Pow{Check: false, NonceLength: nonceLength, Secret: "abc"}
+		p := New(&Pow{Check: false, NonceLength: nonceLength, Secret: "abc"})
 
 		nonce, err := p.GenerateNonce()
 		if err != nil {
@@ -47,9 +51,9 @@ func TestPow_GenerateNonce(t *testing.T) {
 	lens := []int{1, 10, 20, 100}
 	for _, l := range lens {
 		t.Run(fmt.Sprintf("test generate with nonce length %v", l), func(t *testing.T) {
-			p := Pow{
+			p := New(&Pow{
 				NonceLength: l,
-			}
+			})
 			nonce, _ := p.GenerateNonce()
 			if len(nonce[0]) != l {
 				t.Errorf("nonce length mismatch; Got: %v, Expected: %v", len(nonce[0]), l)
@@ -148,23 +152,126 @@ func TestPow_VerifyHashAtDifficulty(t *testing.T) {
 }
 
 func TestNew(t *testing.T) {
-	type args struct {
-		config *Pow
-	}
-	tests := []struct {
-		name string
-		args args
-		want *Pow
-	}{
-		// TODO: Add test cases.
-		{"check proper defaults", args{&Pow{}}, &Pow{NonceLength: 10}},
-		{"check proper sets", args{&Pow{Secret: "abc", Check: true, Difficulty: 10, NonceLength: 5}}, &Pow{Secret: "abc", Check: true, Difficulty: 10, NonceLength: 5}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := New(tt.args.config); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("New() = %v, want %v", got, tt.want)
+	t.Run("check proper defaults", func(t *testing.T) {
+		p := New(&Pow{})
+		q := &Pow{NonceLength: 10}
+		e := reflect.ValueOf(p).Elem()
+		d := reflect.ValueOf(q).Elem()
+		funcNames := make(map[string]int, 0)
+
+		for i := 0; i < e.NumField(); i++ {
+			varName := e.Type().Field(i).Name
+			varType := e.Type().Field(i).Type
+			varKind := varType.Kind()
+			if varKind == reflect.Func {
+				funcNames[varName] = 1
+				continue
+			}
+
+			dvar, _ := d.Type().FieldByName(varName)
+
+			varValue := e.Field(i).Interface()
+			dval := d.FieldByName(dvar.Name).Interface()
+
+			if !reflect.DeepEqual(varValue, dval) {
+				t.Errorf("%v is not equal to test default", varName)
+			}
+
+		}
+
+		t.Run("test default NonceGenerator", func(t *testing.T) {
+
+			x, err := p.NonceGenerator(p.NonceLength)
+			if err != nil {
+				t.Error("error in default nonceGenerator")
+			}
+
+			if len(x) != p.NonceLength {
+				t.Error("default nonce generator is not returning proper length")
+			}
+
+			if !t.Failed() {
+				delete(funcNames, "NonceGenerator")
+			}
+
+		})
+
+		t.Run("test default hash", func(t *testing.T) {
+			test, _ := gonanoid.ID(20)
+			sha256sum := sha256.Sum256([]byte(test))
+
+			if !reflect.DeepEqual(p.Hash([]byte(test)), sha256sum[:]) {
+
+				t.Errorf("Default hash didn't hash properly; Got: %v, Expected: %v", hex.EncodeToString(p.Hash([]byte(test))), hex.EncodeToString(sha256sum[:]))
+			} else {
+				delete(funcNames, "Hash")
 			}
 		})
-	}
+
+		if len(funcNames) > 0 {
+			t.Errorf("Untested Default methods: %v", funcNames)
+		}
+	})
+
+	t.Run("check proper sets", func(t *testing.T) {
+		p := New(&Pow{Secret: "abc", Check: true, Difficulty: 10, NonceLength: 5, NonceGenerator: func(i int) (string, error) {
+			return "test", nil
+		}, Hash: func(b []byte) []byte { return []byte("abc") }})
+
+		q := &Pow{Secret: "abc", Check: true, Difficulty: 10, NonceLength: 5, NonceGenerator: func(i int) (string, error) {
+			return "test", nil
+		}, Hash: func(b []byte) []byte { return []byte("abc") }}
+		e := reflect.ValueOf(p).Elem()
+		d := reflect.ValueOf(q).Elem()
+		funcNames := make(map[string]int, 0)
+
+		for i := 0; i < e.NumField(); i++ {
+			varName := e.Type().Field(i).Name
+			varType := e.Type().Field(i).Type
+			varKind := varType.Kind()
+			if varKind == reflect.Func {
+				funcNames[varName] = 1
+				continue
+			}
+
+			dvar, _ := d.Type().FieldByName(varName)
+
+			varValue := e.Field(i).Interface()
+			dval := d.FieldByName(dvar.Name).Interface()
+
+			if !reflect.DeepEqual(varValue, dval) {
+				t.Errorf("%v is not equal to test default", varName)
+			}
+		}
+		t.Run("test set NonceGenerator", func(t *testing.T) {
+
+			x, _ := p.NonceGenerator(p.NonceLength)
+			y, _ := q.NonceGenerator(q.NonceLength)
+
+			if x != y {
+				t.Errorf("New().NonceGenerator not equal to set one; Got %v, Expected: %v", x, y)
+			}
+
+			if !t.Failed() {
+				delete(funcNames, "NonceGenerator")
+			}
+
+		})
+		t.Run("test set Hash", func(t *testing.T) {
+			a := p.Hash([]byte("a"))
+			if b := p.Hash([]byte("b")); !reflect.DeepEqual(a, b) {
+				t.Errorf("set Hash func didn't return same, Got: %v, Expected: %v", a, b)
+			} else {
+				if !reflect.DeepEqual(a, []byte("abc")) {
+					t.Errorf("set didn't return []byte('abc')")
+				} else {
+					delete(funcNames, "Hash")
+				}
+			}
+		})
+
+		if len(funcNames) > 0 {
+			t.Errorf("Untested Default methods: %v", funcNames)
+		}
+	})
 }

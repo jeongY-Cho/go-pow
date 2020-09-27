@@ -16,6 +16,10 @@ type Pow struct {
 	NonceLength int
 	Check       bool
 	Difficulty  int
+	// NonceGenerator method returns a nonce. Takes an integer parameter
+	// which is `Pow.NonceLength`
+	NonceGenerator func(int) (string, error)
+	Hash           func([]byte) []byte
 }
 
 // GenerateNonce generates a new nonce, also generates signature if verify enabled
@@ -23,7 +27,7 @@ func (p *Pow) GenerateNonce() ([2]string, error) {
 	returnArr := [2]string{}
 
 	var err error
-	returnArr[0], err = gonanoid.ID(p.NonceLength)
+	returnArr[0], err = p.NonceGenerator(p.NonceLength)
 	if err != nil {
 		return returnArr, err
 	}
@@ -32,7 +36,7 @@ func (p *Pow) GenerateNonce() ([2]string, error) {
 		return returnArr, nil
 	}
 
-	hash := sha256.Sum256([]byte(returnArr[0] + p.Secret))
+	hash := p.Hash([]byte(returnArr[0] + p.Secret))
 	returnArr[1] = hex.EncodeToString(hash[:])
 	return returnArr, nil
 }
@@ -44,13 +48,13 @@ func (p *Pow) VerifyHash(nonce string, data string, hash string, nonceSig string
 			return false, errors.New("can't verify with empty nonceSig")
 		}
 
-		sign := sha256.Sum256([]byte(nonce + p.Secret))
+		sign := p.Hash([]byte(nonce + p.Secret))
 		if strSign := hex.EncodeToString(sign[:]); strSign != nonceSig {
 			return false, fmt.Errorf("nonce is invalid. Provided nonce hashed to: <%v> Expected: <%v>", strSign, nonceSig)
 		}
 	}
 
-	hashHere := sha256.Sum256([]byte(data + nonce))
+	hashHere := p.Hash([]byte(data + nonce))
 
 	if hex.EncodeToString(hashHere[:]) != hash {
 		return false, errors.New("failed to verify hash")
@@ -75,15 +79,22 @@ func (p *Pow) VerifyHashAtDifficulty(nonce string, data string, hash string, non
 
 // New helper function to return new pow object with defaults
 func New(config *Pow) *Pow {
-	nonceLength := config.NonceLength
-	if nonceLength == 0 {
-		nonceLength = 10
+	if config.NonceLength == 0 {
+		config.NonceLength = 10
 	}
 
-	return &Pow{
-		Secret:      config.Secret,
-		NonceLength: nonceLength,
-		Check:       config.Check,
-		Difficulty:  config.Difficulty,
+	if config.NonceGenerator == nil {
+		config.NonceGenerator = func(l int) (string, error) {
+			return gonanoid.Nanoid(l)
+		}
 	}
+
+	if config.Hash == nil {
+		config.Hash = func(b []byte) []byte {
+			h := (sha256.Sum256(b))
+			return h[:]
+		}
+	}
+
+	return config
 }
