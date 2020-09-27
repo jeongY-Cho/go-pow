@@ -1,3 +1,7 @@
+![Test](https://github.com/jeongY-Cho/go-pow/workflows/Test/badge.svg?branch=master)
+[![PkgGoDev](https://pkg.go.dev/badge/github.com/jeongy-cho/go-pow)](https://pkg.go.dev/github.com/jeongy-cho/go-pow)
+[![codecov](https://codecov.io/gh/jeongY-Cho/go-pow/branch/master/graph/badge.svg)](https://codecov.io/gh/jeongY-Cho/go-pow)
+![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/jeongy-cho/go-pow)
 # Go - Proof of work
 
 Small package implementing a sha256 based proof of work.
