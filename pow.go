@@ -10,6 +10,14 @@ import (
 	gonanoid "github.com/matoous/go-nanoid"
 )
 
+// NonceGenerator function type. takes a length parameter and returns a string.
+//   The length parameter is optional; the returned string need not be
+//   as long as the length parameter
+type NonceGenerator func(int) (string, error)
+
+// HashFunction type.
+type HashFunction func([]byte) []byte
+
 // Pow ...
 type Pow struct {
 	Secret      string
@@ -17,9 +25,11 @@ type Pow struct {
 	Check       bool
 	Difficulty  int
 	// NonceGenerator method returns a nonce. Takes an integer parameter
-	// which is `Pow.NonceLength`
-	NonceGenerator func(int) (string, error)
-	Hash           func([]byte) []byte
+	// which is `Pow.NonceLength`. Defaults to `gonanoid.Nanoid`
+	NonceGenerator NonceGenerator
+	// Hash is a method that hashes a slice of bytes and returns a new slice.
+	//   Defaults to `sha256.Sum256`
+	Hash HashFunction
 }
 
 // GenerateNonce generates a new nonce, also generates signature if verify enabled
