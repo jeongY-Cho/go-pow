@@ -5,7 +5,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"strings"
+	"log"
+	"math/bits"
 
 	gonanoid "github.com/matoous/go-nanoid"
 )
@@ -75,7 +76,26 @@ func (p *Pow) VerifyHash(nonce string, data string, hash string, nonceSig string
 
 // VerifyDifficulty verifies hash fulfils difficulty requirement
 func (p *Pow) VerifyDifficulty(hash string) bool {
-	return strings.HasPrefix(hash, strings.Repeat("0", p.Difficulty))
+	hashBytes, err := hex.DecodeString(hash)
+	if err != nil {
+		panic(err)
+	}
+
+	diff := p.Difficulty
+
+	for _, byte := range hashBytes {
+		log.Printf("%08b %v %v", byte, diff, hashBytes)
+		lead := bits.LeadingZeros8(uint8(byte))
+		diff -= lead
+		if lead < 8 {
+			if diff <= 0 {
+				return true
+			}
+		}
+
+	}
+
+	return false
 }
 
 // VerifyHashAtDifficulty verifies hash and difficulty
