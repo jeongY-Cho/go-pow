@@ -1,4 +1,4 @@
-module github.com/jeongy-cho/go-pow
+module github.com/jeongy-cho/go-pow/v2
 
 go 1.15
 
