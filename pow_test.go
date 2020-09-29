@@ -1,278 +1,239 @@
 package gopow
 
 import (
+	"bytes"
 	"crypto/sha256"
-	"encoding/hex"
-	"fmt"
+	"errors"
 	"reflect"
 	"testing"
 
 	gonanoid "github.com/matoous/go-nanoid"
 )
 
+func mockNonceGenerator(i int) ([]byte, error) {
+	return bytes.Repeat([]byte{0}, i), nil
+}
+func mockErrorNonceGenerator(i int) ([]byte, error) {
+	return nil, errors.New("")
+}
+
+var testSecret = []byte("secret")
+var testHash1 = []byte{7, 142, 4, 240, 16, 0, 171, 248, 239, 218, 3, 4, 90, 237, 222, 124, 74, 84, 3, 54, 140, 208, 54, 141, 209, 25, 177, 173, 72, 226, 132, 183}
+
 func TestPow_GenerateNonce(t *testing.T) {
-	t.Run("generate nonce with check", func(t *testing.T) {
-		nonceLength := 10
-		p := New(&Pow{Check: true, NonceLength: nonceLength, Secret: "abc"})
-
-		nonce, err := p.GenerateNonce()
-		if err != nil {
-			t.Fatal("generatenonce returned error")
-		}
-
-		if retLen := len(nonce[0]); retLen != nonceLength {
-			t.Errorf("incorrect nonce length; Got: %v; Expected: %v", retLen, nonceLength)
-		}
-
-		if nonce[1] == "" {
-			t.Error("got empty checksum")
-		}
-	})
-
-	t.Run("generate nonce without check", func(t *testing.T) {
-		nonceLength := 10
-		p := New(&Pow{Check: false, NonceLength: nonceLength, Secret: "abc"})
-
-		nonce, err := p.GenerateNonce()
-		if err != nil {
-			t.Fatal("generatenonce returned error")
-		}
-
-		if retLen := len(nonce[0]); retLen != nonceLength {
-			t.Errorf("incorrect nonce length; Got: %v; Expected: %v", retLen, nonceLength)
-		}
-
-		if nonce[1] != "" {
-			t.Error("got a checksum for non check")
-		}
-
-	})
-
-	lens := []int{1, 10, 20, 100}
-	for _, l := range lens {
-		t.Run(fmt.Sprintf("test generate with nonce length %v", l), func(t *testing.T) {
+	type fields struct {
+		Secret         []byte
+		NonceLength    int
+		Check          bool
+		Difficulty     int
+		NonceGenerator NonceGenerator
+		Hash           HashFunction
+	}
+	tests := []struct {
+		name         string
+		fields       fields
+		wantNonce    []byte
+		wantChecksum []byte
+		wantErr      bool
+	}{
+		{"generate with check", fields{Check: true, Secret: testSecret, NonceGenerator: mockNonceGenerator}, []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, testHash1, false},
+		{"generate without check", fields{Secret: testSecret, NonceGenerator: mockNonceGenerator}, []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, []byte(nil), false},
+		{"generate different length", fields{NonceLength: 11, Secret: testSecret, NonceGenerator: mockNonceGenerator}, []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, []byte(nil), false},
+		{"noncegenerate errors", fields{Secret: testSecret, NonceGenerator: mockErrorNonceGenerator}, []byte{}, []byte(nil), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 			p := New(&Pow{
-				NonceLength: l,
+				Secret:         tt.fields.Secret,
+				NonceLength:    tt.fields.NonceLength,
+				Check:          tt.fields.Check,
+				Difficulty:     tt.fields.Difficulty,
+				NonceGenerator: tt.fields.NonceGenerator,
+				Hash:           tt.fields.Hash,
 			})
-			nonce, _ := p.GenerateNonce()
-			if len(nonce[0]) != l {
-				t.Errorf("nonce length mismatch; Got: %v, Expected: %v", len(nonce[0]), l)
+			gotNonce, gotChecksum, err := p.GenerateNonce()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Pow.GenerateNonce() error = %#v, wantErr %#v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(gotNonce, tt.wantNonce) {
+				t.Errorf("Pow.GenerateNonce() gotNonce = %#v, want %#v", gotNonce, tt.wantNonce)
+			}
+			if !reflect.DeepEqual(gotChecksum, tt.wantChecksum) {
+				t.Errorf("Pow.GenerateNonce() gotChecksum = %#v, want %#v", gotChecksum, tt.wantChecksum)
 			}
 		})
 	}
 }
 
 func TestPow_VerifyHash(t *testing.T) {
+	nonce, _ := mockNonceGenerator(10)
+	nonceSig := sha256.Sum256(append(nonce, testSecret...))
+	data := []byte("data")
+	testHash := []byte{86, 169, 122, 123, 158, 200, 209, 207, 229, 17, 165, 76, 125, 108, 77, 184, 206, 83, 30, 233, 52, 2, 248, 50, 138, 185, 83, 7, 59, 68, 30, 144}
+	type fields struct {
+		Secret         []byte
+		NonceLength    int
+		Check          bool
+		Difficulty     int
+		NonceGenerator NonceGenerator
+		Hash           HashFunction
+	}
 	type args struct {
-		nonce    string
-		data     string
-		hash     string
-		nonceSig string
+		nonce    []byte
+		data     []byte
+		hash     []byte
+		nonceSig []byte
 	}
 	tests := []struct {
 		name    string
-		p       *Pow
+		fields  fields
 		args    args
 		want    bool
 		wantErr bool
 	}{
-		{"check, empty", New(&Pow{Check: true}), args{"", "", "", "a"}, false, true},
-		{"no check empty", New(&Pow{}), args{"", "", "", ""}, false, true},
-		{"check", New(&Pow{Check: true, Secret: "secret"}), args{"nonce", "data", "2c177eecd4ad52094136dff33d30163ff0e47a95934a5c3e95abbade8700cdfd", "5c420d7fedeb75e1309b1fe82f9c85d5552f1edfc11c72e7749330881166f18d"}, true, false},
-		{"check but no checksum", New(&Pow{Check: true, Secret: "secret"}), args{"nonce", "data", "2c177eecd4ad52094136dff33d30163ff0e47a95934a5c3e95abbade8700cdfd", ""}, false, true},
-		{"no check", New(&Pow{Check: false}), args{"nonce", "data", "2c177eecd4ad52094136dff33d30163ff0e47a95934a5c3e95abbade8700cdfd", ""}, true, false},
+		{"verify err on bad hash", fields{}, args{nonce: nonce, data: []byte{}, hash: []byte{}, nonceSig: []byte{}}, false, true},
+		{"verify hash", fields{}, args{nonce: nonce, data: data, hash: testHash, nonceSig: []byte{}}, true, false},
+		{"verify hash with check", fields{Check: true, Secret: testSecret}, args{nonce: nonce, data: data, hash: testHash, nonceSig: nonceSig[:]}, true, false},
+		{"hash with check, no sig", fields{Check: true, Secret: testSecret}, args{nonce: nonce, data: data, hash: testHash, nonceSig: []byte{}}, false, true},
+		{"hash with check, bad sig", fields{Check: true, Secret: testSecret}, args{nonce: nonce, data: data, hash: testHash, nonceSig: []byte{1, 2, 3}}, false, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := tt.p.VerifyHash(tt.args.nonce, tt.args.data, tt.args.hash, tt.args.nonceSig)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Pow.VerifyHash() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
+			p := New(&Pow{
+				Secret:         tt.fields.Secret,
+				NonceLength:    tt.fields.NonceLength,
+				Check:          tt.fields.Check,
+				Difficulty:     tt.fields.Difficulty,
+				NonceGenerator: tt.fields.NonceGenerator,
+				Hash:           tt.fields.Hash,
+			})
+			got, _ := p.VerifyHash(tt.args.nonce, tt.args.data, tt.args.hash, tt.args.nonceSig)
+			// if (err != nil) != tt.wantErr {
+			// 	t.Errorf("Pow.VerifyHash() error = %#v, wantErr %#v", err, tt.wantErr)
+			// 	return
+			// }
 			if got != tt.want {
-				t.Errorf("Pow.VerifyHash() = %v, want %v", got, tt.want)
+				t.Errorf("Pow.VerifyHash() = %#v, want %#v", got, tt.want)
 			}
 		})
 	}
 }
 
 func TestPow_VerifyDifficulty(t *testing.T) {
+	type fields struct {
+		Secret         []byte
+		NonceLength    int
+		Check          bool
+		Difficulty     int
+		NonceGenerator NonceGenerator
+		Hash           HashFunction
+	}
 	type args struct {
-		hash string
+		hash []byte
 	}
 	tests := []struct {
-		name string
-		p    *Pow
-		args args
-		want bool
+		name   string
+		fields fields
+		args   args
+		want   bool
 	}{
-		{"test diff 0", New(&Pow{}), args{"ffffffffff"}, true},
-		{"test diff 1 fail", New(&Pow{Difficulty: 1}), args{"ff000000"}, false},
-		{"test diff 1", New(&Pow{Difficulty: 1}), args{"7f000000"}, true},
-		{"test diff 2", New(&Pow{Difficulty: 2}), args{"7fffffff"}, false},
+		{"empty hash", fields{}, args{[]byte{}}, false},
+		{"difficulty 8", fields{}, args{[]byte{0}}, true},
+		{"difficulty 1", fields{Difficulty: 1}, args{[]byte{255, 0}}, false},
+		{"difficulty 9", fields{Difficulty: 9}, args{[]byte{0, 127}}, true},
+		{"difficulty 9 fail", fields{Difficulty: 9}, args{[]byte{0, 255, 0}}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.p.VerifyDifficulty(tt.args.hash); got != tt.want {
-				t.Errorf("Pow.VerifyDifficulty() = %v, want %v", got, tt.want)
+			p := New(&Pow{
+				Secret:         tt.fields.Secret,
+				NonceLength:    tt.fields.NonceLength,
+				Check:          tt.fields.Check,
+				Difficulty:     tt.fields.Difficulty,
+				NonceGenerator: tt.fields.NonceGenerator,
+				Hash:           tt.fields.Hash,
+			})
+			if got := p.VerifyDifficulty(tt.args.hash); got != tt.want {
+				t.Errorf("Pow.VerifyDifficulty() = %#v, want %#v", got, tt.want)
 			}
 		})
 	}
 }
 
 func TestPow_VerifyHashAtDifficulty(t *testing.T) {
+	nonce, _ := mockNonceGenerator(10)
+	nonceSig := sha256.Sum256(append(nonce, testSecret...))
+	data := []byte("data")
+	testHash := []byte{86, 169, 122, 123, 158, 200, 209, 207, 229, 17, 165, 76, 125, 108, 77, 184, 206, 83, 30, 233, 52, 2, 248, 50, 138, 185, 83, 7, 59, 68, 30, 144}
+
+	type fields struct {
+		Secret         []byte
+		NonceLength    int
+		Check          bool
+		Difficulty     int
+		NonceGenerator NonceGenerator
+		Hash           HashFunction
+	}
 	type args struct {
-		nonce    string
-		data     string
-		hash     string
-		nonceSig string
+		nonce    []byte
+		data     []byte
+		hash     []byte
+		nonceSig []byte
 	}
 	tests := []struct {
 		name    string
-		p       *Pow
+		fields  fields
 		args    args
 		want    bool
 		wantErr bool
 	}{
-		{"good hash, bad diff", New(&Pow{Check: true, Secret: "secret", Difficulty: 3}), args{"nonce", "data", "2c177eecd4ad52094136dff33d30163ff0e47a95934a5c3e95abbade8700cdfd", "5c420d7fedeb75e1309b1fe82f9c85d5552f1edfc11c72e7749330881166f18d"}, false, true},
-		{"good hash, good diff", New(&Pow{Check: true, Secret: "secret", Difficulty: 2}), args{"nonce", "data11222222222222222221", "0b891de4a7ca9eaf65ea443e72980a2acd63d00caa9f2f431885ee16939bba99", "5c420d7fedeb75e1309b1fe82f9c85d5552f1edfc11c72e7749330881166f18d"}, true, false},
-		{"bad hash, good diff", New(&Pow{Check: true, Secret: "secret", Difficulty: 2}), args{"nonce", "data11222222222222222221", "0b8912e4a7ca9eaf65ea443e72980a2acd63d00caa9f2f431885ee16939bba99", "5c420d7fedeb75e1309b1fe82f9c85d5552f1edfc11c72e7749330881166f18d"}, false, true},
+		{"good hash, good diff", fields{Difficulty: 1}, args{nonce: nonce, data: data, nonceSig: nonceSig[:], hash: testHash}, true, false},
+		{"good hash, bad diff", fields{Difficulty: 1}, args{hash: []byte{255}}, false, true},
+		{"bad hash, good diff", fields{}, args{hash: []byte{0}}, false, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := tt.p.VerifyHashAtDifficulty(tt.args.nonce, tt.args.data, tt.args.hash, tt.args.nonceSig)
+			p := New(&Pow{
+				Secret:         tt.fields.Secret,
+				NonceLength:    tt.fields.NonceLength,
+				Check:          tt.fields.Check,
+				Difficulty:     tt.fields.Difficulty,
+				NonceGenerator: tt.fields.NonceGenerator,
+				Hash:           tt.fields.Hash,
+			})
+			got, err := p.VerifyHashAtDifficulty(tt.args.nonce, tt.args.data, tt.args.hash, tt.args.nonceSig)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Pow.VerifyHashAtDifficulty() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("Pow.VerifyHashAtDifficulty() error = %#v, wantErr %#v", err, tt.wantErr)
 				return
 			}
 			if got != tt.want {
-				t.Errorf("Pow.VerifyHashAtDifficulty() = %v, want %v", got, tt.want)
+				t.Errorf("Pow.VerifyHashAtDifficulty() = %#v, want %#v", got, tt.want)
 			}
 		})
 	}
 }
 
 func TestNew(t *testing.T) {
-	t.Run("check proper defaults", func(t *testing.T) {
-		p := New(&Pow{})
-		q := &Pow{NonceLength: 10}
-		e := reflect.ValueOf(p).Elem()
-		d := reflect.ValueOf(q).Elem()
-		funcNames := make(map[string]int, 0)
+	p := New(&Pow{})
 
-		for i := 0; i < e.NumField(); i++ {
-			varName := e.Type().Field(i).Name
-			varType := e.Type().Field(i).Type
-			varKind := varType.Kind()
-			if varKind == reflect.Func {
-				funcNames[varName] = 1
-				continue
-			}
+	if expect := 10; p.NonceLength != expect {
+		t.Errorf("didn't receive expected val for default Pow.Difficulty; Got: %v, Expected: %v", p.NonceLength, expect)
+	}
 
-			dvar, _ := d.Type().FieldByName(varName)
-
-			varValue := e.Field(i).Interface()
-			dval := d.FieldByName(dvar.Name).Interface()
-
-			if !reflect.DeepEqual(varValue, dval) {
-				t.Errorf("%v is not equal to test default", varName)
-			}
-
+	if l, err := p.NonceGenerator(10); len(l) != 10 {
+		if err != nil {
+			t.Error("got err: ", err)
 		}
+		t.Errorf("len of default generator not 10: got %v", len(l))
+	}
 
-		t.Run("test default NonceGenerator", func(t *testing.T) {
+	a, _ := gonanoid.Nanoid()
+	testBytes := []byte(a)
+	defaultHash := sha256.Sum256(testBytes)
+	shouldBeDefaultHash := p.Hash(testBytes)
 
-			x, err := p.NonceGenerator(p.NonceLength)
-			if err != nil {
-				t.Error("error in default nonceGenerator")
-			}
-
-			if len(x) != p.NonceLength {
-				t.Error("default nonce generator is not returning proper length")
-			}
-
-			if !t.Failed() {
-				delete(funcNames, "NonceGenerator")
-			}
-
-		})
-
-		t.Run("test default hash", func(t *testing.T) {
-			test, _ := gonanoid.ID(20)
-			sha256sum := sha256.Sum256([]byte(test))
-
-			if !reflect.DeepEqual(p.Hash([]byte(test)), sha256sum[:]) {
-
-				t.Errorf("Default hash didn't hash properly; Got: %v, Expected: %v", hex.EncodeToString(p.Hash([]byte(test))), hex.EncodeToString(sha256sum[:]))
-			} else {
-				delete(funcNames, "Hash")
-			}
-		})
-
-		if len(funcNames) > 0 {
-			t.Errorf("Untested Default methods: %v", funcNames)
-		}
-	})
-
-	t.Run("check proper sets", func(t *testing.T) {
-		p := New(&Pow{Secret: "abc", Check: true, Difficulty: 10, NonceLength: 5, NonceGenerator: func(i int) (string, error) {
-			return "test", nil
-		}, Hash: func(b []byte) []byte { return []byte("abc") }})
-
-		q := &Pow{Secret: "abc", Check: true, Difficulty: 10, NonceLength: 5, NonceGenerator: func(i int) (string, error) {
-			return "test", nil
-		}, Hash: func(b []byte) []byte { return []byte("abc") }}
-		e := reflect.ValueOf(p).Elem()
-		d := reflect.ValueOf(q).Elem()
-		funcNames := make(map[string]int, 0)
-
-		for i := 0; i < e.NumField(); i++ {
-			varName := e.Type().Field(i).Name
-			varType := e.Type().Field(i).Type
-			varKind := varType.Kind()
-			if varKind == reflect.Func {
-				funcNames[varName] = 1
-				continue
-			}
-
-			dvar, _ := d.Type().FieldByName(varName)
-
-			varValue := e.Field(i).Interface()
-			dval := d.FieldByName(dvar.Name).Interface()
-
-			if !reflect.DeepEqual(varValue, dval) {
-				t.Errorf("%v is not equal to test default", varName)
-			}
-		}
-		t.Run("test set NonceGenerator", func(t *testing.T) {
-
-			x, _ := p.NonceGenerator(p.NonceLength)
-			y, _ := q.NonceGenerator(q.NonceLength)
-
-			if x != y {
-				t.Errorf("New().NonceGenerator not equal to set one; Got %v, Expected: %v", x, y)
-			}
-
-			if !t.Failed() {
-				delete(funcNames, "NonceGenerator")
-			}
-
-		})
-		t.Run("test set Hash", func(t *testing.T) {
-			a := p.Hash([]byte("a"))
-			if b := p.Hash([]byte("b")); !reflect.DeepEqual(a, b) {
-				t.Errorf("set Hash func didn't return same, Got: %v, Expected: %v", a, b)
-			} else {
-				if !reflect.DeepEqual(a, []byte("abc")) {
-					t.Errorf("set didn't return []byte('abc')")
-				} else {
-					delete(funcNames, "Hash")
-				}
-			}
-		})
-
-		if len(funcNames) > 0 {
-			t.Errorf("Untested Default methods: %v", funcNames)
-		}
-	})
+	if !reflect.DeepEqual(defaultHash[:], shouldBeDefaultHash) {
+		t.Errorf("default has isn't sha256: Got %v expected %v", defaultHash[:], shouldBeDefaultHash)
+	}
 }
